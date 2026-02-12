@@ -13,6 +13,7 @@ import { connectDB } from "./database/db.js";
 
 import errorMiddleware from "./middlewares/error.middleware.js";
 import arcjetMiddleware from "./middlewares/arcjet.middleware.js";
+import authRouter from "./routes/auth.route.js";
 
 const numCPUs = availableParallelism();
 
@@ -64,8 +65,8 @@ if (cluster.isPrimary) {
       app.use(arcjetMiddleware);
 
       // Custom Routes Middlewares
-      // app.use("/api/auth", authRoutes);
-      app.use("/api/chat", arcjetMiddleware);
+      app.use("/api/auth", authRouter);
+      // app.use("/api/chat",);
 
 
       // Post-Custom Middleware
