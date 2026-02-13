@@ -2,14 +2,10 @@
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import axios from 'axios';
 
-export default function LoginPage() {
-  const router = useRouter();
-
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,8 +16,8 @@ export default function LoginPage() {
     setIsLoading(true);
 
     // Validation
-    if (!email || !password) {
-      setError('All fields are required');
+    if (!email) {
+      setError('Email is required');
       setIsLoading(false);
       return;
     }
@@ -34,18 +30,11 @@ export default function LoginPage() {
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000'}/api/auth/`,
-        { email, password },
+      await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000'}/api/auth/forgot-password`,
+        { email },
         {
-          withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
           },
@@ -54,14 +43,8 @@ export default function LoginPage() {
 
       setSuccess(true);
       setEmail('');
-      setPassword('');
-
-      // Redirect to chat page after successful login
-      setTimeout(() => {
-        router.push('/chat');
-      }, 1500);
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Forgot password error:', err);
       
       if (axios.isAxiosError(err)) {
         if (err.response?.data?.error) {
@@ -69,7 +52,7 @@ export default function LoginPage() {
         } else if (err.code === 'ERR_NETWORK') {
           setError('Cannot connect to server. Make sure the API server is running at http://localhost:1000');
         } else {
-          setError(err.message || 'Login failed. Please try again.');
+          setError(err.message || 'Something went wrong. Please try again.');
         }
       } else {
         setError('An unexpected error occurred. Please try again.');
@@ -85,10 +68,10 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Sign In
+            Forgot Password?
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Welcome back to InkaWebAI
+            We'll help you reset your password
           </p>
         </div>
 
@@ -96,7 +79,10 @@ export default function LoginPage() {
         {success && (
           <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
             <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              ✓ Login successful! Redirecting you now...
+              ✓ Check your email!
+            </p>
+            <p className="mt-2 text-sm text-green-700 dark:text-green-300">
+              We've sent you a password reset link. It may take a few minutes to arrive.
             </p>
           </div>
         )}
@@ -112,6 +98,13 @@ export default function LoginPage() {
                 </p>
               </div>
             )}
+
+            {/* Info Box */}
+            <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                💡 Enter the email address associated with your account and we'll send you a reset link.
+              </p>
+            </div>
 
             {/* Email Field */}
             <div>
@@ -132,52 +125,25 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Password Field */}
-            <div>
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Password
-                </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400"
-                >
-                  Forgot?
-                </Link>
-              </div>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-purple-800"
-                disabled={isLoading}
-              />
-            </div>
-
             {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
               className="w-full rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 font-medium text-white transition-all hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-600 disabled:opacity-50"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? 'Sending...' : 'Send Reset Link'}
             </button>
           </form>
         )}
 
         {/* Footer */}
         <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-          Don't have an account?{' '}
+          Remember your password?{' '}
           <Link
-            href="/signup"
+            href="/login"
             className="font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
           >
-            Sign up here
+            Back to login
           </Link>
         </p>
       </div>

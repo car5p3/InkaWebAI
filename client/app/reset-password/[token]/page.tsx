@@ -1,17 +1,16 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import axios from 'axios';
 
-export default function SignUpPage() {
-  const router = useRouter();
+export default function ResetPasswordPage() {
+  const params = useParams();
+  const token = params.token as string;
 
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,22 +21,8 @@ export default function SignUpPage() {
     setIsLoading(true);
 
     // Validation
-    if (!username || !email || !password || !confirmPassword) {
+    if (!password || !passwordConfirm) {
       setError('All fields are required');
-      setIsLoading(false);
-      return;
-    }
-
-    if (username.length < 3) {
-      setError('Username must be at least 3 characters');
-      setIsLoading(false);
-      return;
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address');
       setIsLoading(false);
       return;
     }
@@ -48,18 +33,23 @@ export default function SignUpPage() {
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (password !== passwordConfirm) {
       setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!token) {
+      setError('Invalid reset link');
       setIsLoading(false);
       return;
     }
 
     try {
       await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000'}/api/auth/signup`,
-        { username, email, password },
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000'}/api/auth/reset-password/${token}`,
+        { password, passwordConfirm },
         {
-          withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
           },
@@ -67,17 +57,15 @@ export default function SignUpPage() {
       );
 
       setSuccess(true);
-      setUsername('');
-      setEmail('');
       setPassword('');
-      setConfirmPassword('');
+      setPasswordConfirm('');
 
-      // Redirect to verify email page after successful signup
+      // Redirect to login after success
       setTimeout(() => {
-        router.push('/verify-email');
+        window.location.href = '/login';
       }, 2000);
     } catch (err) {
-      console.error('Signup error:', err);
+      console.error('Reset password error:', err);
       
       if (axios.isAxiosError(err)) {
         if (err.response?.data?.error) {
@@ -85,7 +73,7 @@ export default function SignUpPage() {
         } else if (err.code === 'ERR_NETWORK') {
           setError('Cannot connect to server. Make sure the API server is running at http://localhost:1000');
         } else {
-          setError(err.message || 'Signup failed. Please try again.');
+          setError(err.message || 'Failed to reset password');
         }
       } else {
         setError('An unexpected error occurred. Please try again.');
@@ -101,10 +89,10 @@ export default function SignUpPage() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Create Account
+            Reset Password
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Join InkaWebAI today
+            Enter your new password below
           </p>
         </div>
 
@@ -112,17 +100,23 @@ export default function SignUpPage() {
         {success && (
           <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
             <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              ✓ Account created successfully!
+              ✓ Password reset successfully! Redirecting to login...
             </p>
             <p className="mt-2 text-sm text-green-700 dark:text-green-300">
-              Check your email to verify your account. Redirecting...
+              Redirecting in 2 seconds... or{' '}
+              <Link
+                href="/login"
+                className="font-semibold underline hover:text-green-600"
+              >
+                click here to login
+              </Link>
             </p>
           </div>
         )}
 
         {/* Form */}
         {!success && (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Error Message */}
             {error && (
               <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
@@ -132,61 +126,20 @@ export default function SignUpPage() {
               </div>
             )}
 
-            {/* Username Field */}
-            <div>
-              <label
-                htmlFor="username"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Username
-              </label>
-              <input
-                type="text"
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Choose a username"
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-purple-800"
-                disabled={isLoading}
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                At least 3 characters
-              </p>
-            </div>
-
-            {/* Email Field */}
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Email Address
-              </label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-purple-800"
-                disabled={isLoading}
-              />
-            </div>
-
             {/* Password Field */}
             <div>
               <label
                 htmlFor="password"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                Password
+                New Password
               </label>
               <input
                 type="password"
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Create a password"
+                placeholder="Enter your new password"
                 className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-purple-800"
                 disabled={isLoading}
               />
@@ -198,17 +151,17 @@ export default function SignUpPage() {
             {/* Confirm Password Field */}
             <div>
               <label
-                htmlFor="confirmPassword"
+                htmlFor="passwordConfirm"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Confirm Password
               </label>
               <input
                 type="password"
-                id="confirmPassword"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm your password"
+                id="passwordConfirm"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                placeholder="Confirm your new password"
                 className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-purple-800"
                 disabled={isLoading}
               />
@@ -220,21 +173,23 @@ export default function SignUpPage() {
               disabled={isLoading}
               className="w-full rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 font-medium text-white transition-all hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-600 disabled:opacity-50"
             >
-              {isLoading ? 'Creating Account...' : 'Sign Up'}
+              {isLoading ? 'Resetting Password...' : 'Reset Password'}
             </button>
           </form>
         )}
 
         {/* Footer */}
-        <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-          Already have an account?{' '}
-          <Link
-            href="/login"
-            className="font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
-          >
-            Log in here
-          </Link>
-        </p>
+        {!success && (
+          <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+            Remember your password?{' '}
+            <Link
+              href="/login"
+              className="font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
+            >
+              Back to login
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

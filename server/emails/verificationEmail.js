@@ -1,6 +1,6 @@
 export function verificationEmail({ username, token }) {
-  const callbackUrl = process.env.CALLBACK_URL || "http://localhost:3000";
-  const base = callbackUrl.replace(/\/$/, "");
+  const clientUrl = process.env.CALLBACK_URL || process.env.CLIENT_URL || "http://localhost:3000";
+  const base = clientUrl.replace(/\/$/, "");
   const verifyLink = `${base}/verify?token=${encodeURIComponent(token)}`;
 
   const subject = "Verify your email — InkaWebAI";

@@ -27,7 +27,8 @@ const UserSchema = new mongoose.Schema(
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpiresAt: { type: Date, default: null },
     verificationToken: { type: String, default: null },
-    verificationExpiresAt: { type: Date, default: null },
+    // renamed for consistency with controller logic
+    verificationTokenExpiresAt: { type: Date, default: null },
 
     provider: {
       type: String,
@@ -38,6 +39,19 @@ const UserSchema = new mongoose.Schema(
     lastLogin: { type: Date, default: Date.now },
 
     role: { type: String, enum: ["admin", "user"], default: "user" },
+
+    // Stripe payments
+    stripeCustomerId: { type: String, unique: true, sparse: true },
+    isPremium: { type: Boolean, default: false },
+
+    orders: [
+      {
+        sessionId: String,
+        amount: Number, // cents
+        description: String,
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,

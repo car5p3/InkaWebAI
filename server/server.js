@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import cluster from "node:cluster";
 import { availableParallelism } from "node:os";
 import process from "node:process";
@@ -14,6 +15,8 @@ import { connectDB } from "./database/db.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import arcjetMiddleware from "./middlewares/arcjet.middleware.js";
 import authRouter from "./routes/auth.route.js";
+import chatRouter from "./routes/chat.route.js";
+import stripeRouter, { stripeWebhook } from "./routes/stripe.route.js";
 
 const numCPUs = availableParallelism();
 
@@ -44,10 +47,20 @@ if (cluster.isPrimary) {
 
       const app = express();
       app.set("trust proxy", true);
-      const PORT = process.env.PORT || 3000;
+      const PORT = process.env.PORT || 1000;
 
       // Middleware
-      app.use(cors());
+      // In development allow the client origin dynamically to avoid CORS issues (Turbopack/dev server)
+      const corsOptions = {};
+      if (process.env.NODE_ENV === 'production') {
+        corsOptions.origin = process.env.CLIENT_URL || "http://localhost:3000";
+      } else {
+        // reflect request origin back (allow all origins in dev)
+        corsOptions.origin = true;
+      }
+      corsOptions.credentials = true;
+
+      app.use(cors(corsOptions));
       app.use(express.json());
       app.use(express.urlencoded({ extended: true }));
       app.use(cookieParser());
@@ -61,12 +74,25 @@ if (cluster.isPrimary) {
       // app.use(passport.initialize());
       // app.use(passport.session());
 
-      // Pre-Custom Middleware
-      app.use(arcjetMiddleware);
+      // Pre-Custom Middleware (Arcjet) - enable when ARCJET_KEY is configured
+      if (process.env.ARCJET_KEY) {
+        app.use(arcjetMiddleware);
+        console.log('Arcjet middleware enabled');
+      } else {
+        console.warn('ARCJET_KEY not set; Arcjet middleware not initialized.');
+      }
 
       // Custom Routes Middlewares
       app.use("/api/auth", authRouter);
-      // app.use("/api/chat",);
+      app.use("/api/chat", chatRouter);
+      app.use("/api/stripe", stripeRouter);
+
+      // stripe webhook must receive raw body for signature verification
+      app.post(
+        "/api/stripe/webhook",
+        express.raw({ type: "application/json" }),
+        stripeWebhook
+      );
 
 
       // Post-Custom Middleware

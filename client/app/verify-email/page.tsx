@@ -5,11 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 
-export default function LoginPage() {
+export default function VerifyEmailPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,30 +19,16 @@ export default function LoginPage() {
     setIsLoading(true);
 
     // Validation
-    if (!email || !password) {
-      setError('All fields are required');
-      setIsLoading(false);
-      return;
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address');
-      setIsLoading(false);
-      return;
-    }
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+    if (!token) {
+      setError('Verification code is required');
       setIsLoading(false);
       return;
     }
 
     try {
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000'}/api/auth/`,
-        { email, password },
+      await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000'}/api/auth/verify-email`,
+        { token },
         {
           withCredentials: true,
           headers: {
@@ -53,15 +38,14 @@ export default function LoginPage() {
       );
 
       setSuccess(true);
-      setEmail('');
-      setPassword('');
+      setToken('');
 
-      // Redirect to chat page after successful login
+      // Redirect to login page after successful verification
       setTimeout(() => {
-        router.push('/chat');
-      }, 1500);
+        router.push('/login');
+      }, 2000);
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Verification error:', err);
       
       if (axios.isAxiosError(err)) {
         if (err.response?.data?.error) {
@@ -69,7 +53,7 @@ export default function LoginPage() {
         } else if (err.code === 'ERR_NETWORK') {
           setError('Cannot connect to server. Make sure the API server is running at http://localhost:1000');
         } else {
-          setError(err.message || 'Login failed. Please try again.');
+          setError(err.message || 'Verification failed. Please try again.');
         }
       } else {
         setError('An unexpected error occurred. Please try again.');
@@ -85,10 +69,10 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Sign In
+            Verify Email
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Welcome back to InkaWebAI
+            Enter the verification code sent to your email
           </p>
         </div>
 
@@ -96,7 +80,10 @@ export default function LoginPage() {
         {success && (
           <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
             <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              ✓ Login successful! Redirecting you now...
+              ✓ Email verified successfully!
+            </p>
+            <p className="mt-2 text-sm text-green-700 dark:text-green-300">
+              Redirecting you to login page...
             </p>
           </div>
         )}
@@ -113,47 +100,27 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Email Field */}
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Email Address
-              </label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-purple-800"
-                disabled={isLoading}
-              />
+            {/* Info Box */}
+            <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                📧 Check your email for the verification code. It may take a few minutes to arrive.
+              </p>
             </div>
 
-            {/* Password Field */}
+            {/* Verification Code Field */}
             <div>
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Password
-                </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400"
-                >
-                  Forgot?
-                </Link>
-              </div>
+              <label
+                htmlFor="token"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Verification Code
+              </label>
               <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                type="text"
+                id="token"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Paste your verification code here"
                 className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-purple-800"
                 disabled={isLoading}
               />
@@ -165,21 +132,23 @@ export default function LoginPage() {
               disabled={isLoading}
               className="w-full rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 font-medium text-white transition-all hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-600 disabled:opacity-50"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? 'Verifying...' : 'Verify Email'}
             </button>
           </form>
         )}
 
         {/* Footer */}
-        <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-          Don't have an account?{' '}
-          <Link
-            href="/signup"
-            className="font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
-          >
-            Sign up here
-          </Link>
-        </p>
+        {!success && (
+          <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+            Already verified?{' '}
+            <Link
+              href="/login"
+              className="font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
+            >
+              Go to login
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );
