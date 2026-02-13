@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import { User } from "../models/user.model.js";
 import { generateVerificationCode } from "../utils/generateVerificationCode.js";
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
+import { sendEmail } from "../utils/email.js";
+import { verificationEmail } from "../emails/verificationEmail.js";
 
 export const signup = async (req, res) => {
   const { username, email, password } = req.body;
@@ -31,6 +33,17 @@ export const signup = async (req, res) => {
       verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
     await newUser.save();
+
+    // Send verification email
+    console.log("📧 Attempting to send verification email to:", newUser.email);
+    try {
+      const { subject, text, html } = verificationEmail({ username: newUser.username, token: verficationToken });
+      await sendEmail({ to: newUser.email, subject, text, html });
+      console.log("✅ Verification email queued successfully");
+    } catch (emailErr) {
+      console.error("❌ Failed to send verification email:", emailErr && emailErr.message ? emailErr.message : emailErr);
+      console.error("Full error:", emailErr);
+    }
 
     // JWT token generation and sending verification email should be done here
     generateTokenAndSetCookie(res, newUser._id);
