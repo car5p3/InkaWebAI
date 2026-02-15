@@ -1,345 +1,338 @@
 "use client";
 
-import React, { useState, useRef, FormEvent, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import React, { useState, useEffect, useRef, FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 
 interface Message {
   id: number;
   text: string;
-  sender: 'user' | 'bot';
+  sender: "user" | "bot";
 }
 
-const ChatPage: React.FC = () => {
-  const initialBotMessage: Message = {
-    id: Date.now(),
-    text: "Hello! I'm InkaWebAI — which service would you like help with? (e.g., Web development, Mobile app, E-commerce)",
-    sender: 'bot',
-  };
+interface ChatInstance {
+  id: string;
+  title?: string;
+  messages?: Message[];
+  updatedAt?: string;
+  messageCount?: number;
+}
+
+export default function ChatPage() {
+  const router = useRouter();
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-  const [logoutLoading, setLogoutLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [instances, setInstances] = useState<Array<any>>([]);
+  const [instances, setInstances] = useState<ChatInstance[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [requiresLogin, setRequiresLogin] = useState(false);
   const [user, setUser] = useState<any>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const initialBotMessage: Message = {
+    id: Date.now(),
+    text: "Hello! I'm your AI assistant. How can I help you today?",
+    sender: "bot",
   };
 
+  const scrollToBottom = () => bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
+  // INITIAL LOAD
   useEffect(() => {
     (async () => {
+      setLoadingInstances(true);
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1000";
       try {
-        setLoadingInstances(true);
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000';
-
-        // First check authentication status
+        // Auth check
         try {
           const meResp = await axios.get(`${apiBase}/api/auth/me`, { withCredentials: true });
-          setRequiresLogin(false);
+          console.log("User authenticated:", meResp.data.user);
           setUser(meResp.data.user);
+          setRequiresLogin(false);
         } catch (meErr: any) {
+          console.log("Auth check failed:", meErr?.response?.status);
           if (meErr?.response?.status === 401) {
             setRequiresLogin(true);
             setMessages([initialBotMessage]);
-            setInstances([]);
-            setSelectedInstanceId(null);
             return;
           }
-          // other errors fall through to instances fetch attempt
-          console.warn('Auth check failed:', meErr);
         }
 
-        // Authenticated: fetch instances
-        const res = await axios.get(`${apiBase}/api/chat/instances`, { withCredentials: true });
-        const list = res?.data?.instances || [];
-        setInstances(list);
-
-        if (list.length > 0) {
-          const firstId = list[0].id;
-          await loadInstance(firstId);
-        } else {
-          await createNewInstance();
-        }
+        // Load chat instances
+        await reloadInstances();
       } catch (err) {
-        console.error('Failed to load chat instances:', err);
+        console.error("Failed to initialize chat:", err);
       } finally {
         setLoadingInstances(false);
       }
     })();
   }, []);
 
-  const loadInstance = async (id: string) => {
+  const reloadInstances = async () => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1000";
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000';
-      const res = await axios.get(`${apiBase}/api/chat/instances/${id}`, { withCredentials: true });
-      const inst = res?.data?.instance;
-      if (inst) {
-        const mapped = (inst.messages || []).map((m: any, idx: number) => ({ id: idx + Date.now(), text: m.text, sender: m.sender }));
-        setMessages(mapped.length ? mapped : [initialBotMessage]);
-        setSelectedInstanceId(inst._id || inst.id || id);
+      console.log("Reloading instances...");
+      const res = await axios.get(`${apiBase}/api/chat/instances`, { withCredentials: true });
+      console.log("Instances loaded:", res.data?.instances?.length || 0);
+      setInstances(res.data?.instances || []);
+      // Auto-load first instance if none selected
+      if (res.data?.instances?.length && !selectedInstanceId) {
+        await loadInstance(res.data.instances[0].id);
       }
-    } catch (err) {
-      console.error('Failed to load instance:', err);
+    } catch (err: any) {
+      console.error("Failed to reload instances:", err?.response?.data || err);
+    }
+  };
+
+  const loadInstance = async (id: string) => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1000";
+    try {
+      console.log("Loading instance:", id);
+      const res = await axios.get(`${apiBase}/api/chat/instances/${id}`, { withCredentials: true });
+      const inst = res.data?.instance;
+      if (inst) {
+        console.log("Instance loaded with", inst.messages?.length || 0, "messages");
+        setMessages(inst.messages?.length ? inst.messages : [initialBotMessage]);
+        setSelectedInstanceId(inst.id);
+      }
+    } catch (err: any) {
+      console.error("Failed to load instance:", err?.response?.data || err);
     }
   };
 
   const createNewInstance = async () => {
     if (requiresLogin) {
-      setMessages((prev) => [...prev, { id: Date.now(), text: 'Please log in to create persistent chats.', sender: 'bot' }]);
+      setMessages((prev) => [...prev, { id: Date.now(), text: "Please log in to create persistent chats.", sender: "bot" }]);
       return;
     }
+
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1000";
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000';
+      console.log("Creating new instance...");
       const res = await axios.post(`${apiBase}/api/chat/instances`, {}, { withCredentials: true });
-      const instanceId = res?.data?.instanceId;
+      const instanceId = res.data?.instanceId;
+      console.log("New instance created:", instanceId);
       if (instanceId) {
         setMessages([initialBotMessage]);
         setSelectedInstanceId(instanceId);
-        const listRes = await axios.get(`${apiBase}/api/chat/instances`, { withCredentials: true });
-        setInstances(listRes?.data?.instances || []);
+        await reloadInstances();
       }
-    } catch (err) {
-      console.error('Failed to create instance:', err);
+    } catch (err: any) {
+      console.error("Failed to create instance:", err?.response?.data || err);
     }
   };
 
-  const reloadInstances = async () => {
+  const deleteInstance = async (id: string) => {
+    if (!confirm("Delete this chat? This cannot be undone.")) return;
+
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1000";
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000';
-      const res = await axios.get(`${apiBase}/api/chat/instances`, { withCredentials: true });
-      setInstances(res?.data?.instances || []);
-    } catch (err) {
-      console.error('Failed to reload instances:', err);
+      console.log("Deleting instance:", id);
+      await axios.delete(`${apiBase}/api/chat/instances/${id}`, { withCredentials: true });
+      console.log("Instance deleted");
+      await reloadInstances();
+      if (selectedInstanceId === id) {
+        setSelectedInstanceId(null);
+        setMessages([initialBotMessage]);
+      }
+    } catch (err: any) {
+      console.error("Failed to delete instance:", err?.response?.data || err);
     }
   };
 
   const handleSend = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
+
     if (requiresLogin) {
-      setMessages((prev) => [...prev, { id: Date.now(), text: 'Please log in to use the chat and save conversations.', sender: 'bot' }]);
-      setInput('');
+      setMessages((prev) => [...prev, { id: Date.now(), text: "Please log in to use chat.", sender: "bot" }]);
+      setInput("");
       return;
     }
-    const userMsg: Message = {
-      id: Date.now(),
-      text: input.trim(),
-      sender: 'user',
-    };
 
-    // add user message locally
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
+    const newUserMsg: Message = { id: Date.now(), text: input.trim(), sender: "user" };
+    const updatedMessages = [...messages, newUserMsg];
+    setMessages(updatedMessages);
+    setInput("");
     setIsLoading(true);
 
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1000";
+    
+    console.log("Sending message...", {
+      messageCount: updatedMessages.length,
+      instanceId: selectedInstanceId
+    });
+
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000';
-      const payload = { messages: [...messages, userMsg], instanceId: selectedInstanceId };
-
-      const res = await axios.post(`${apiBase}/api/chat`, payload, { withCredentials: true });
-
-      const aiText = res?.data?.message || 'Sorry, no response from assistant.';
-
-      const botMsg: Message = {
-        id: Date.now() + 1,
-        text: aiText,
-        sender: 'bot',
+      const res = await axios.post(
+        `${apiBase}/api/chat`, 
+        { messages: updatedMessages, instanceId: selectedInstanceId }, 
+        { withCredentials: true }
+      );
+      
+      console.log("Response received:", res.data);
+      
+      const botMsg: Message = { 
+        id: Date.now() + 1, 
+        text: res.data?.message || "No response.", 
+        sender: "bot" 
       };
-
       setMessages((prev) => [...prev, botMsg]);
-      if (res?.data?.instanceId) setSelectedInstanceId(res.data.instanceId);
-      scrollToBottom();
-
-      // refresh instances list so updatedAt/message count are current
-      try { await reloadInstances(); } catch (e) { /* ignore */ }
-
-      if (res?.data?.shouldNavigate && res.data.navigateUrl) {
-        // optional server-driven navigation
-        router.push(res.data.navigateUrl);
+      
+      if (res.data?.instanceId) {
+        console.log("Updated instance ID:", res.data.instanceId);
+        setSelectedInstanceId(res.data.instanceId);
       }
+      
+      await reloadInstances();
     } catch (err: any) {
-      console.error('Chat API error:', err);
-      const serverMessage = err?.response?.data?.error || err?.message || 'There was an error contacting the chat service. Try again later.';
-      const errMsg: Message = {
-        id: Date.now() + 2,
-        text: serverMessage,
-        sender: 'bot',
-      };
-      setMessages((prev) => [...prev, errMsg]);
-      scrollToBottom();
+      console.error("Chat API error:", err);
+      console.error("Error response:", err?.response?.data);
+      console.error("Error status:", err?.response?.status);
+      
+      const errorMessage = err?.response?.data?.error 
+        || err?.message 
+        || "Error sending message. Please try again.";
+      
+      setMessages((prev) => [
+        ...prev, 
+        { 
+          id: Date.now() + 2, 
+          text: `❌ ${errorMessage}`, 
+          sender: "bot" 
+        }
+      ]);
     } finally {
       setIsLoading(false);
+      scrollToBottom();
     }
   };
 
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-gray-900">
-      <div className="mx-auto w-full max-w-4xl flex flex-col h-full shadow-lg rounded-lg overflow-hidden">
-        {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 border-b bg-white dark:bg-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">AI</div>
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">InkaWebAI</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Minimal chat • AI assistant</p>
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Sidebar */}
+      <aside className="w-72 border-r bg-white dark:bg-gray-800 flex flex-col">
+        <div className="p-4 flex justify-between items-center border-b">
+          <button 
+            onClick={createNewInstance} 
+            className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+            disabled={requiresLogin}
+          >
+            New chat
+          </button>
+          <button 
+            onClick={reloadInstances} 
+            className="px-2 py-1 border rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            Refresh
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-2">
+          {loadingInstances ? (
+            <div className="text-sm text-gray-500 p-2">Loading chats...</div>
+          ) : null}
+          
+          {requiresLogin ? (
+            <div className="text-sm text-yellow-600 dark:text-yellow-400 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded m-2">
+              Please log in to save chat history
             </div>
-          </div>
-          {user?.isPremium && (
-            <span className="ml-4 inline-block px-2 py-0.5 text-xs font-medium bg-yellow-200 text-yellow-800 rounded">Premium</span>
-          )}
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-gray-500 dark:text-gray-400">online</div>
-            <a href="/profile" className="text-sm text-indigo-600 hover:underline">Profile</a>
-            <button
-              onClick={async () => {
-                if (logoutLoading) return;
-                try {
-                  setLogoutLoading(true);
-                  await axios.post(
-                    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000'}/api/auth/logout`,
-                    {},
-                    { withCredentials: true }
-                  );
-                  router.push('/login');
-                } catch (err) {
-                  console.error('Logout error:', err);
-                  setLogoutLoading(false);
-                }
-              }}
-              className="ml-2 rounded-full border border-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200"
-            >
-              {logoutLoading ? 'Logging out...' : 'Logout'}
-            </button>
-          </div>
-        </header>
+          ) : null}
+          
+          {instances.length ? (
+            <ul>
+              {instances.map((inst) => (
+                <li key={inst.id} className="mb-1 flex justify-between items-center">
+                  <button
+                    className={`flex-1 text-left p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                      selectedInstanceId === inst.id ? "bg-gray-200 dark:bg-gray-600" : ""
+                    }`}
+                    onClick={() => loadInstance(inst.id)}
+                  >
+                    <div className="font-medium truncate">
+                      {inst.title || `Chat • ${inst.messageCount || 0} msgs`}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-300">
+                      {inst.updatedAt ? new Date(inst.updatedAt).toLocaleString() : ""}
+                    </div>
+                  </button>
+                  <button 
+                    onClick={() => deleteInstance(inst.id)} 
+                    className="ml-2 text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : !loadingInstances ? (
+            <div className="text-sm text-gray-500 mt-2 p-2">No chats yet</div>
+          ) : null}
+        </div>
+      </aside>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar */}
-          <aside className="w-72 bg-white dark:bg-gray-900 border-r overflow-y-auto">
-            <div className="p-4 sticky top-0 bg-white dark:bg-gray-900 z-10">
-              <div className="flex items-center gap-2 mb-3">
-                <button
-                  onClick={createNewInstance}
-                  className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm hover:bg-indigo-700"
-                >
-                  New chat
-                </button>
-                <button onClick={reloadInstances} className="rounded-md border px-2 py-1 text-sm">Refresh</button>
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">Your chats</div>
-              {requiresLogin && (
-                <div className="mt-2 text-xs text-red-500">You must log in to create and persist chats.</div>
-              )}
-            </div>
-
-            <div className="p-2">
-              {loadingInstances ? (
-                <div className="text-sm text-gray-500">Loading...</div>
-              ) : instances.length ? (
-                <ul className="space-y-1">
-                  {instances.map((inst) => (
-                    <li key={inst.id} className="flex items-center justify-between">
-                      <button
-                        onClick={async () => { await loadInstance(inst.id); }}
-                        className={`flex-1 text-left px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 ${selectedInstanceId === inst.id ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
-                      >
-                        <div className="text-sm font-medium">{inst.title || `Chat • ${inst.messageCount || 0} msgs`}</div>
-                        <div className="text-xs text-gray-500">{new Date(inst.updatedAt).toLocaleString()}</div>
-                      </button>
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (!confirm('Delete this chat? This cannot be undone.')) return;
-                          try {
-                            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1000';
-                            await axios.delete(`${apiBase}/api/chat/instances/${inst.id}`, { withCredentials: true });
-                            await reloadInstances();
-                            // if deleted was selected, clear messages
-                            if (selectedInstanceId === inst.id) {
-                              setSelectedInstanceId(null);
-                              setMessages([initialBotMessage]);
-                            }
-                          } catch (err) {
-                            console.error('Failed to delete instance:', err);
-                          }
-                        }}
-                        className="ml-2 text-xs text-red-600 hover:text-red-800 px-2 py-1"
-                        title="Delete chat"
-                      >
-                        Delete
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-sm text-gray-500">No chats yet — start a new one.</div>
-              )}
-            </div>
-          </aside>
-
-          {/* Main chat column */}
-          <div className="flex-1 flex flex-col">
-            {/* Messages */}
-            <main className="flex-1 p-6 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+      {/* Main chat */}
+      <div className="flex-1 flex flex-col">
+        <main className="flex-1 p-6 overflow-y-auto">
           <div className="flex flex-col gap-4 max-w-3xl mx-auto">
-            {messages.length === 0 && (
-              <div className="text-center text-sm text-gray-500 dark:text-gray-400">Start the conversation — ask me anything.</div>
-            )}
-
             {messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`rounded-2xl px-4 py-2 max-w-[70%] break-words shadow-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'}`}>
+              <div 
+                key={msg.id} 
+                className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div 
+                  className={`px-4 py-2 rounded-2xl max-w-[70%] shadow whitespace-pre-wrap ${
+                    msg.sender === "user" 
+                      ? "bg-indigo-600 text-white" 
+                      : "bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  }`}
+                >
                   {msg.text}
                 </div>
               </div>
             ))}
-            
             {isLoading && (
               <div className="flex justify-start">
-                <div className="rounded-2xl px-4 py-2 max-w-[70%] break-words shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">AI is typing...</div>
+                <div className="px-4 py-2 rounded-2xl max-w-[70%] shadow bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-pulse">●</div>
+                    <div className="animate-pulse delay-100">●</div>
+                    <div className="animate-pulse delay-200">●</div>
+                    <span className="ml-2">AI is typing...</span>
+                  </div>
+                </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
+            <div ref={bottomRef} />
           </div>
-            </main>
+        </main>
 
-            {/* Composer */}
-            <div className="px-6 py-4 border-t bg-white dark:bg-gray-800">
-          <form onSubmit={handleSend} className="flex items-center gap-3 max-w-4xl mx-auto">
-            <input
-              type="text"
-              className="flex-1 rounded-full border border-gray-200 bg-transparent px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-gray-700 dark:focus:ring-indigo-600"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Message... (Shift+Enter for newline)"
-            />
-
-            <button type="submit" className="inline-flex items-center gap-2 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m7-7H5" />
-              </svg>
-              Send
-            </button>
-          </form>
-            </div>
-          </div>
-        </div>
+        {/* Composer */}
+        <form onSubmit={handleSend} className="flex p-4 border-t bg-white dark:bg-gray-800">
+          <input
+            type="text"
+            className="flex-1 rounded-full border px-4 py-2 focus:outline-none dark:bg-gray-700 dark:text-white"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={requiresLogin ? "Please log in to chat..." : "Type a message..."}
+            disabled={isLoading || requiresLogin}
+          />
+          <button 
+            type="submit" 
+            className="ml-2 px-4 py-2 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading || !input.trim() || requiresLogin}
+          >
+            Send
+          </button>
+        </form>
       </div>
     </div>
   );
-};
-
-export default ChatPage;
+}
